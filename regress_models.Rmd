@@ -1,0 +1,115 @@
+---
+title: "Exploring the relationship between type of transmission and miles per gallon"
+author: "Elena Tikalenko"
+output: pdf_document
+---
+
+Summary
+-----------------------------------------------------------------------------------------------------------------
+The purpose of this dociment is to show that there is relationship between type of transsmission and miles per gallon, namely after increasing of weigth of car on one unit, for cars with manual type of transsmission miles per gallon will decrease much faster than for cars with automatic type of transmission. Also it was made an attempt to estimate the quantify the MPG difference between automatic and manual transmissions.
+
+```{r, echo=FALSE, include=FALSE}
+library(ggplot2)
+library(sjPlot)
+library(memisc)
+library(GGally)
+cars <- mtcars
+```
+
+Description of the data
+--------------------------------------------------------------------------------------------------
+The data for investigation was extracted from "mtcars" dataset with 32 observation. The variables are  miles per gallon (mpg), number of cylinders (cyl), displacement (disp), gross horsepower (hp), rear axle ratio (drat), weight in lb/1000 (wt), typical quarter mile times (qsec), whether the car has a V engine or a straight engine (vs), type of transmission (am, 0 = automatic, 1 = manual), number of forward gears (gear) and number of carburetors (carb).
+
+If we calculate the correlation matrix *cor(mtcars)* then it becomes evident that some pairs of variables are highly correlated with each other (correlation is in interval 0.8 - 0.9): *cyl* and *disp*, *cyl* and *hp*, *disp* and *wt*. So we can throw away variables *disp* and *cyl*. On the pairs plot for the remaining variables (see Appendix, "Pairs plot") we can see the relationships between, for example, *mpg* and *disp*, *mpg* and *hp*, etc.. Relationship
+between *mpg* and *am* is unclear.
+
+Model Selection
+--------------------------------------------------------------------------------------------------
+Let's create a series of models adding variables one by one. And do the ANOVA test for these models.
+```{r}
+model1 <- lm(mpg ~ am, data = cars)
+model2 <- lm(mpg ~ am + wt, data = cars)
+model3 <- lm(mpg ~ am + wt + hp, data = cars)
+model4 <- lm(mpg ~ am + wt + hp + drat, data = cars)
+model5 <- lm(mpg ~ am + wt + hp + drat + qsec, data = cars)
+model6 <- lm(mpg ~ am + wt + hp + drat + qsec + vs, data = cars)
+model7 <- lm(mpg ~ am + wt + hp + drat + qsec + vs + gear, data = cars)
+model8 <- lm(mpg ~ am + wt + hp + drat + qsec + vs + gear + carb, data = cars)
+anova(model1, model2, model3, model4, model5, model6, model7, model8)
+
+```
+From the results of anova function we can see that including of *wt* and *hp* variables appears to be necessary. Other variables are not significant and can be excluded. Let's compare adjusted R-squared of *model1*, *model2* and *model3*.
+
+```{r echo=FALSE, include=FALSE}
+Radj1 <- summary(model1)$adj.r.squared
+Radj2 <- summary(model2)$adj.r.squared
+Radj3 <- summary(model3)$adj.r.squared
+```
+```{r echo=FALSE}
+rbind(c("model1", "model2", "model3"), c(Radj1, Radj2, Radj3))
+```
+It's clear that *model1* is the worst model of the three as adjusted R-squared is very small. In another two models variable *am* is not significant.
+
+Let's check *model3* by fitting an analysis of variance.
+```{r}
+summary(aov(mpg ~ am*wt*hp, data = cars))
+```
+From the results we can see that one more variable with dummy-variable can be added in our model - am*wt. Let's fit a new model and check the coefficients.
+```{r}
+model_final <- lm(mpg ~ am + wt + hp + am:wt, data = cars)
+summary(model_final)
+```
+Adjusted R-squared for *model_final* is greater than for *model3*.
+```{r}
+anova(model3,model_final)
+```
+And the results of anova-function shows that it seems that variable *am:wt* necessary in model.
+So, if we put *am* in *model_final*, then we'll get the next model:
+
+- for case, if we have a car with automatic transmission then our model is the next: mpg = 30.95 - 2.52wt - 0.03hp
+
+- for case of car with manual transmission: mpg = 42.50 - 6.10wt - 0.03hp
+
+To quantify the uncertainty in coefficients let's check the plot of coefficients estimates with confidence interval (see Appendix, "Coefficients estimates with confidence interval").
+
+It's clear that hypothesys about that coefficients are equal to zero is rejected as confidence intervals don't contain zero.
+
+So our model means that after increasing of weigth of car on one unit for cars with manual type of transsmission miles per gallon will decrease on approximatly 6 units, while for cars with automatic type of transmission on 2,5 units only. This dependence is also visible on the plot (see Appendix, "Miles from weigth for automatical and manual types of transmission").
+
+Residual plot
+---------------------------------------------------------------------------------------------------------------------
+On the residual plot (see Appendix, "Residual plot") residuals are pretty symmetrically distributed and there aren’t clear patterns in general. No abnormalities are observed in the residual plot.
+
+\pagebreak
+
+### Appendix
+```{r}
+ggpairs(cars, columns = c(1, 4:11), title = "Pairs plot", params=c(size=1), 
+        upper=list(params=list(size=5)))+
+        theme(axis.line=element_blank(), 
+              axis.text=element_blank(),axis.ticks=element_blank())
+```
+\pagebreak
+
+```{r}
+sjp.lm(model_final, showModelSummary = TRUE, 
+             title = "Coefficients estimates with confidence interval")
+```
+\pagebreak
+
+```{r}
+cars$am <- as.factor(cars$am)
+ggplot(cars, aes(x = wt, y = mpg, color = am, size = hp)) + geom_point() + 
+        facet_grid(am ~.) + stat_smooth(method = "lm") +
+        ggtitle("Miles from weigth for automatical and manual types of transmission") +
+        labs(x = "Weigth", y = "Miles per gallon")
+
+```
+\pagebreak
+
+```{r}
+ggplot(model_final, aes(x=fitted(model_final), y=resid(model_final))) +
+        geom_point() + ggtitle("Residual plot") +
+        labs(x = "Fitted values", y = "Residuals") + geom_hline(aes(yintercept = 0)) +
+        theme(legend.position="none")
+```
